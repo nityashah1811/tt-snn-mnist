@@ -29,8 +29,8 @@
   <text class="s" x="250" y="62" text-anchor="middle">2 flops + edge detect</text>
   <path class="w" d="M140,50 L178,50"/>
   <rect class="ctl" x="360" y="20" width="580" height="60" rx="5"/>
-  <text class="h" x="650" y="43" text-anchor="middle">Control FSM: one timestep = 13 bytes, then one finalise pass</text>
-  <text class="m" x="650" y="64" text-anchor="middle">(BYTE 80 clk) ×13 → FIN 10 clk → IDLE</text>
+  <text class="h" x="650" y="43" text-anchor="middle">Control FSM: one timestep = 8 bytes, then one finalise pass</text>
+  <text class="m" x="650" y="64" text-anchor="middle">(BYTE 80 clk) ×8 → FIN 10 clk → IDLE</text>
   <path class="w" d="M320,50 L358,50"/>
 
   <!-- input byte -->
@@ -63,7 +63,7 @@
 
   <rect class="lut" x="855" y="190" width="90" height="70" rx="5"/>
   <text class="h" x="900" y="212" text-anchor="middle">W</text>
-  <text class="s" x="900" y="229" text-anchor="middle">1,000 ternary</text>
+  <text class="s" x="900" y="229" text-anchor="middle">640 ternary</text>
   <text class="s" x="900" y="244" text-anchor="middle">as logic</text>
   <path class="w" d="M855,225 L832,225"/>
 

@@ -92,7 +92,7 @@ static uint8_t read_dbg(int sel) {
 }
 
 #ifndef NPIX
-#define NPIX 100  // input pixels (10x10)
+#define NPIX 64  // input pixels (8x8)
 #endif
 #define NB ((NPIX + 7) / 8)  // spike bytes per timestep
 #define STR(x) #x

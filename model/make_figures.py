@@ -14,11 +14,13 @@ idx = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 rows = [l.split() for l in (here / "test_vectors.txt").read_text().splitlines() if not l.startswith("#")]
 lv = np.array([int(c) for c in rows[idx][0]])
 label, gold = int(rows[idx][1]), int(rows[idx][2])
-w = np.load(here / "weights_ternary.npz")["arr_0"]  # (10, 100)
-T, S = 16, 10
+w = np.load(here / "weights_ternary.npz")["arr_0"]  # (10, pixels)
+T, P = 16, w.shape[1]
+S = int(round(P ** 0.5))  # image side
+NB = (P + 7) // 8         # spike bytes per timestep
 
 # integer model, keeping every output spike
-s = rate_encode_np(lv[None, :], T)[:, 0, :]  # (T, 100)
+s = rate_encode_np(lv[None, :], T)[:, 0, :]  # (T, pixels)
 v = np.zeros(10, dtype=np.int32)
 out = np.zeros((T, 10), dtype=np.int32)
 for t in range(T):
@@ -35,21 +37,21 @@ o = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" font-family
      f'<rect width="{W}" height="{H}" fill="#ffffff"/>',
      '<style>.t{font-weight:bold;fill:#111;font-size:14px}.s{fill:#555;font-size:11.5px}.a{fill:#888;font-size:10.5px}</style>']
 
-# 1. the 10x10 input image
+# 1. the input image
 grey = ["#ffffff", "#c7cbd1", "#7b8390", "#1f2937"]
-x0, y0, c = 24, 58, 13
-o.append(f'<text class="t" x="{x0}" y="30">Input: 10×10, 2-bit levels</text>')
+x0, y0, c = 24, 58, 130 // S
+o.append(f'<text class="t" x="{x0}" y="30">Input: {S}×{S}, 2-bit levels</text>')
 o.append(f'<text class="s" x="{x0}" y="46">test image {idx}, label {label}</text>')
-for p in range(100):
+for p in range(P):
     r, k = divmod(p, S)
     o.append(f'<rect x="{x0 + k * c}" y="{y0 + r * c}" width="{c}" height="{c}" fill="{grey[lv[p]]}" stroke="#e5e7eb" stroke-width="0.5"/>')
 for q in range(4):
-    o.append(f'<rect x="{x0 + q * 33}" y="{y0 + 10 * c + 14}" width="11" height="11" fill="{grey[q]}" stroke="#9ca3af" stroke-width="0.6"/>')
-    o.append(f'<text class="a" x="{x0 + q * 33 + 14}" y="{y0 + 10 * c + 23}">{q}</text>')
+    o.append(f'<rect x="{x0 + q * 33}" y="{y0 + S * c + 14}" width="11" height="11" fill="{grey[q]}" stroke="#9ca3af" stroke-width="0.6"/>')
+    o.append(f'<text class="a" x="{x0 + q * 33 + 14}" y="{y0 + S * c + 23}">{q}</text>')
 
 # 2. the 16 input spike frames
-fx, fy, fc, gap = 200, 58, 4, 6
-o.append(f'<text class="t" x="{fx}" y="30">Input spikes, one frame per timestep (sent as 13 bytes each)</text>')
+fx, fy, fc, gap = 200, 58, 40 // S, 6
+o.append(f'<text class="t" x="{fx}" y="30">Input spikes, one frame per timestep (sent as {NB} bytes each)</text>')
 o.append(f'<text class="s" x="{fx}" y="46">a pixel at level q spikes q times every 4 steps</text>')
 for t in range(T):
     gx = fx + t * (S * fc + gap)

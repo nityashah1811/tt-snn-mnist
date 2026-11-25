@@ -9,11 +9,11 @@ from ttboard.demoboard import DemoBoard
 
 STB, CLR, DBG = 0x01, 0x02, 0x04
 
-# First three images of test_vectors.txt: (100 levels 0-3 of the 10x10 image, true label, expected chip prediction)
+# First three images of test_vectors.txt: (64 levels 0-3, true label, expected chip prediction)
 IMAGES = [
-    ("0000000000011000000002233333200000000220000000030000000021000000003000000003100000001300000000300000", 7, 7),
-    ("0023332000003102200000000320000000230000000130000000032000000023000000003200000100333333330000111000", 2, 2),
-    ("0000002000000000300000000120000000021000000003000000001200000000210000000030000000003000000001200000", 1, 1),
+    ("0000000000000000011222100000020000000200000020000001100000030000", 7, 7),
+    ("0002200000313000000030000003100000120000003000000023332200000000", 2, 2),
+    ("0000000000000100000020000000200000001000000200000003000000000000", 1, 1),
 ]
 
 
@@ -21,7 +21,7 @@ def encode(levels):
     words = []
     for t in range(16):
         w = 0
-        for p in range(100):
+        for p in range(64):
             q = levels[p]
             if ((t + 1) * q) // 4 > (t * q) // 4:
                 w |= 1 << p
@@ -68,7 +68,7 @@ class SNNChip:
         self._pulse(CLR)
         self._wait_idle()
         for w in encode(levels):
-            for b in range(13):
+            for b in range(8):
                 self.tt.ui_in.value = (w >> (8 * b)) & 0xFF
                 self._pulse(STB)
                 self._wait_idle()
