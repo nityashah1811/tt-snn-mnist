@@ -190,7 +190,7 @@ int main(int argc, char **argv) {
     uint64_t s[16]; encode(vecs[2].lv, s);
     for (int b = 0; b < 7; b++) load_byte((uint8_t)(s[0] >> (8 * b)));
     set_ui((uint8_t)(s[0] >> 56)); set_uio(uio | STB); tick(4); set_uio(uio & ~STB);
-    tick(50);  // now inside FIN1/L2
+    tick(50);  // now inside the last BYTE pass
     CHECK(busy(), "core should be busy computing the timestep");
     clear();
     send_image(vecs[2]);

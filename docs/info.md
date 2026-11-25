@@ -3,17 +3,17 @@
 This chip is a small **spiking neural network (SNN)** that classifies handwritten digits (MNIST) in hardware.
 
 - **Input:** an 8×8 image with 2-bit pixel levels. The host turns it into **spike trains** over 16 timesteps: a pixel at level q spikes q times every 4 steps. Each timestep is 64 spike bits, sent as 8 bytes.
-- **Network:** 64 inputs → 24 hidden → 10 output **leaky integrate-and-fire (LIF)** neurons. All 1,776 weights are ternary (−1, 0, +1) and hardwired into logic.
-- **Neurons:** each timestep, `v = sat6(v − (v >>> 4) + Σ wᵢ·sᵢ)`. A neuron fires when `v ≥ θ` and then subtracts θ. θ = 8 in the hidden layer and 4 in the output layer. Membranes saturate to 6 bits.
-- **Readout:** each output neuron counts its spikes over 16 timesteps. The predicted digit is the one with the most spikes, with ties going to the lower digit.
+- **Network:** 64 inputs → 10 output **leaky integrate-and-fire (LIF)** neurons, one per digit. All 640 weights are ternary (−1, 0, +1) and hardwired into logic.
+- **Neurons:** each timestep, `v = sat8(v − (v >>> 4) + Σ wᵢ·sᵢ)`. A neuron fires when `v ≥ 8` and then subtracts 8. Membranes saturate to 8 bits.
+- **Readout:** each neuron counts its spikes over 16 timesteps. The predicted digit is the one with the most spikes, with ties going to the lower digit.
 
 Inside:
 
-- **Rotating neuron rings.** All neuron state lives in two shift-register rings (24 × 8-bit and 10 × 12-bit) that rotate one position every clock. Only the neuron passing the head is updated, so the whole datapath is one small adder per ring, with no per-neuron arithmetic and no enable multiplexers.
+- **Rotating neuron ring.** All neuron state lives in one shift-register ring (10 × {5-bit spike count, 9-bit accumulator}) that rotates one position every clock. Only the neuron passing the head is updated, so the whole datapath is one small adder, with no per-neuron arithmetic and no enable multiplexers.
 - **Weights as logic.** The trained weights are a lookup table compiled into gates, addressed by which neuron is at the head and which pixel is being processed. There's no ROM or RAM.
-- **Three passes per timestep.** After the 8th byte, the chip finalises the hidden layer (fire, reset, leak), routes the hidden spikes to the output layer, then finalises the outputs and updates the running argmax. A timestep takes about 2,000 clocks, so an image takes about 3.3 ms at 10 MHz.
+- **One finalise pass per timestep.** Each byte takes 8 ring rotations (80 clocks), one per pixel. After the 8th byte, one more rotation saturates each membrane, fires, counts the spike, resets, applies the leak and updates the running argmax. A timestep takes about 800 clocks, so an image takes about 1.3 ms at 10 MHz.
 
-Accuracy is 86.83% on the 10,000-image MNIST test set. The RTL matches the Python and C++ reference models bit for bit on all 10,000 images.
+Accuracy is 79.26% on the 10,000-image MNIST test set. The RTL matches the Python and C++ reference models bit for bit on all 10,000 images.
 
 ## How to test
 
