@@ -37,7 +37,7 @@ def load_vectors():
 
 
 def encode(levels):
-    """Host-side deterministic rate code: 16 timesteps x 64-bit spike words."""
+    """Host-side deterministic rate code: 16 timesteps x 100-bit spike words (13 bytes each)."""
     words = []
     for t in range(16):
         w = 0
@@ -93,7 +93,7 @@ class Host:
     async def send_image(self, levels, steps=16):
         words = encode(levels)
         for t in range(steps):
-            for b in range(8):
+            for b in range(13):
                 await self.load_byte((words[t] >> (8 * b)) & 0xFF)
 
     async def read_dbg(self, sel):

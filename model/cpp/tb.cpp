@@ -14,12 +14,12 @@ int main(int argc, char **argv) {
     FILE *f = fopen(path, "r");
     if (!f) { fprintf(stderr, "cannot open %s\n", path); return 2; }
 
-    char line[512], lv[SNN_IN + 8];
+    char line[1024], lv[256];
     int total = 0, correct = 0, mismatches = 0;
     while (fgets(line, sizeof line, f) && (max_vectors == 0 || total < max_vectors)) {
         if (line[0] == '#') continue;
         int label, gold, gc[SNN_OUT];
-        if (sscanf(line, "%70s %d %d %d %d %d %d %d %d %d %d %d %d", lv, &label, &gold,
+        if (sscanf(line, "%250s %d %d %d %d %d %d %d %d %d %d %d %d", lv, &label, &gold,
                    &gc[0], &gc[1], &gc[2], &gc[3], &gc[4], &gc[5], &gc[6], &gc[7], &gc[8], &gc[9]) != 13
             || (int)strlen(lv) != SNN_IN) {
             fprintf(stderr, "bad line %d\n", total + 1);
@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
         uint8_t levels[SNN_IN];
         for (int p = 0; p < SNN_IN; p++) levels[p] = (uint8_t)(lv[p] - '0');
 
-        uint64_t spikes[SNN_T];
+        spikes_t spikes[SNN_T];
         snn_rate_encode(levels, spikes);
 
         uint8_t counts[SNN_OUT], step_counts[SNN_OUT];

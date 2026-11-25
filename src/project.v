@@ -2,7 +2,7 @@
  * Spiking neural network MNIST classifier for Tiny Tapeout (sky130, 1x1 tile).
  * SPDX-License-Identifier: Apache-2.0
  *
- * Network: 64 input spikes (8x8 image, rate-coded by the host) -> 10 LIF output neurons.
+ * Network: 100 input spikes (10x10 image, rate-coded by the host) -> 10 LIF output neurons.
  * Ternary hardwired weights; T = 16 timesteps per image; class = output with most spikes.
  * Bit-exact with the Python/C++ reference (model/export.py, model/cpp/snn.cpp):
  *     v = sat8(v - (v >>> 4) + sum_i w_i * s_i);  spike = v >= 8;  if spike: v -= 8
@@ -14,15 +14,16 @@
  * op tracks which neuron is at the head. The leak for the next timestep is applied when a
  * neuron is finalised (equivalent, since nothing happens to it in between), so the stored
  * value is always "leaked, ready to add". The 9-bit accumulator holds v + sum without
- * overflow (|v| <= 128, |sum| <= 64); saturation is applied once, at finalisation.
+ * overflow (|v| <= 128, |sum| <= 100); saturation is applied once, at finalisation.
  *
  * Host protocol (all inputs may be asynchronous to clk; they are synchronised):
  *   CLEAR  : rising edge on uio[1] -> zero all neurons, counts, step and byte counters.
- *   LOAD   : put 8 spike bits on ui[7:0] (bit i = pixel 8*b+i, b = byte 0..7 of the step),
+ *   LOAD   : put 8 spike bits on ui[7:0] (bit i = pixel 8*b+i, b = byte 0..12 of the step;
+ *            pixel = row*10 + col, bits for pixels >= 100 are ignored),
  *            then rising edge on uio[0]. Hold ui stable until busy (uo[5]) goes high or
  *            >= 4 clocks. Wait for busy = 0 before the next byte.
- *            After the 8th byte of a timestep the chip finalises that timestep automatically.
- *   RESULT : after 16 timesteps (128 bytes) done (uo[4]) = 1 and uo[3:0] = predicted class.
+ *            After the 13th byte of a timestep the chip finalises that timestep automatically.
+ *   RESULT : after 16 timesteps (208 bytes) done (uo[4]) = 1 and uo[3:0] = predicted class.
  *            Further bytes are ignored until CLEAR.
  *   DEBUG  : uio[2] = 1 switches uo[7:0] to the debug word selected by uio[6:3]:
  *            0..9 -> spike count of that class, 10 -> step counter, 11 -> byte index,
@@ -70,7 +71,7 @@ module tt_um_nityashah1811_snn_mnist (
   reg  [2:0]   state;
   reg  [3:0]   op;        // neuron at ring head, free-running 0..9
   reg  [2:0]   pix;       // pixel within byte (S_BYTE)
-  reg  [2:0]   bi;        // byte index within timestep
+  reg  [3:0]   bi;        // byte index within timestep, 0..12
   reg  [4:0]   step;      // completed timesteps, 0..16
   reg  [7:0]   din;       // latched spike byte
   reg  [4:0]   best_cnt;
@@ -86,7 +87,7 @@ module tt_um_nityashah1811_snn_mnist (
   wire [4:0] cnt = oring[13:9];
 
   wire [1:0] w;
-  snn_w u_w (.addr({op, bi, pix}), .w(w));
+  snn_w u_w (.addr({op, bi, pix}), .w(w));  // {neuron, pixel[6:0]}, pixel = 8*bi + pix
   wire [8:0] acc_add = acc + (din[pix] ? {{7{w[1]}}, w} : 9'd0);
 
   // sat8: clamp the 9-bit accumulator to [-128, 127]
@@ -121,7 +122,7 @@ module tt_um_nityashah1811_snn_mnist (
       state    <= S_CLRW;
       op       <= 4'd0;
       pix      <= 3'd0;
-      bi       <= 3'd0;
+      bi       <= 4'd0;
       step     <= 5'd0;
       din      <= 8'd0;
       best_cnt <= 5'd0;
@@ -138,7 +139,7 @@ module tt_um_nityashah1811_snn_mnist (
         case (state)
           S_CLRW: if (op_last) state <= S_CLR;
           S_CLR: begin
-            bi   <= 3'd0;
+            bi   <= 4'd0;
             step <= 5'd0;
             pred <= 4'd0;
             if (op_last) state <= S_IDLE;
@@ -154,8 +155,8 @@ module tt_um_nityashah1811_snn_mnist (
           S_BYTE: if (op_last) begin
             pix <= pix + 3'd1;
             if (pix == 3'd7) begin
-              bi    <= bi + 3'd1;  // wraps 7 -> 0
-              state <= (bi == 3'd7) ? S_FIN : S_IDLE;
+              bi    <= (bi == 4'd12) ? 4'd0 : bi + 4'd1;
+              state <= (bi == 4'd12) ? S_FIN : S_IDLE;
             end
           end
           S_FIN: begin
@@ -181,13 +182,13 @@ module tt_um_nityashah1811_snn_mnist (
   always @(*) begin
     case (dbg_sel)
       4'd10:   dbg_word = {3'd0, step};
-      4'd11:   dbg_word = {5'd0, bi};
+      4'd11:   dbg_word = {4'd0, bi};
       4'd15:   dbg_word = 8'hA5;
       default: dbg_word = (dbg_sel < 4'd10) ? {3'd0, dbg_cnt} : 8'd0;
     endcase
   end
 
-  assign uo_out  = dbg_mode ? dbg_word : {1'b0, (bi == 3'd0), busy, done, pred};
+  assign uo_out  = dbg_mode ? dbg_word : {1'b0, (bi == 4'd0), busy, done, pred};
   assign uio_out = 8'd0;
   assign uio_oe  = 8'd0;  // all bidirectional pins are inputs
 

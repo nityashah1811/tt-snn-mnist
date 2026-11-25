@@ -91,21 +91,28 @@ static uint8_t read_dbg(int sel) {
   return v;
 }
 
-struct Vec { uint8_t lv[64]; int label, gold, counts[10]; };
+#ifndef NPIX
+#define NPIX 100  // input pixels (10x10)
+#endif
+#define NB ((NPIX + 7) / 8)  // spike bytes per timestep
+#define STR(x) #x
+#define XSTR(x) STR(x)
 
-static void encode(const uint8_t lv[64], uint64_t spikes[16]) {
-  for (int t = 0; t < 16; t++) {
-    uint64_t w = 0;
-    for (int p = 0; p < 64; p++) if (((t + 1) * lv[p]) / 4 > (t * lv[p]) / 4) w |= 1ULL << p;
-    spikes[t] = w;
-  }
+struct Vec { uint8_t lv[NPIX]; int label, gold, counts[10]; };
+
+// spikes[t][b] bit i = pixel 8*b+i spikes at timestep t (padding bits are 0)
+static void encode(const uint8_t lv[NPIX], uint8_t spikes[16][NB]) {
+  memset(spikes, 0, 16 * NB);
+  for (int t = 0; t < 16; t++)
+    for (int p = 0; p < NPIX; p++)
+      if (((t + 1) * lv[p]) / 4 > (t * lv[p]) / 4) spikes[t][p / 8] |= (uint8_t)(1u << (p % 8));
 }
 
 static void send_image(const Vec &v, int jitter = 0, int steps = 16) {
-  uint64_t s[16];
+  uint8_t s[16][NB];
   encode(v.lv, s);
   for (int t = 0; t < steps; t++)
-    for (int b = 0; b < 8; b++) load_byte((uint8_t)(s[t] >> (8 * b)), jitter);
+    for (int b = 0; b < NB; b++) load_byte(s[t][b], jitter);
 }
 
 // Returns true if prediction, done flag and all counts match.
@@ -128,16 +135,16 @@ int main(int argc, char **argv) {
   FILE *f = fopen(argv[1], "r");
   if (!f) { fprintf(stderr, "cannot open %s\n", argv[1]); return 2; }
   std::vector<Vec> vecs;
-  char line[512], lvs[80];
+  char line[1024], lvs[NPIX + 16];
   while (fgets(line, sizeof line, f)) {
     if (line[0] == '#') continue;
     Vec v;
-    if (sscanf(line, "%70s %d %d %d %d %d %d %d %d %d %d %d %d", lvs, &v.label, &v.gold,
+    if (sscanf(line, "%" XSTR(NPIX) "s %d %d %d %d %d %d %d %d %d %d %d %d", lvs, &v.label, &v.gold,
                &v.counts[0], &v.counts[1], &v.counts[2], &v.counts[3], &v.counts[4], &v.counts[5],
-               &v.counts[6], &v.counts[7], &v.counts[8], &v.counts[9]) != 13 || strlen(lvs) != 64) {
+               &v.counts[6], &v.counts[7], &v.counts[8], &v.counts[9]) != 13 || strlen(lvs) != NPIX) {
       fprintf(stderr, "bad vector line\n"); return 2;
     }
-    for (int p = 0; p < 64; p++) v.lv[p] = (uint8_t)(lvs[p] - '0');
+    for (int p = 0; p < NPIX; p++) v.lv[p] = (uint8_t)(lvs[p] - '0');
     vecs.push_back(v);
     if (max_images && (int)vecs.size() >= max_images) break;
   }
@@ -187,9 +194,9 @@ int main(int argc, char **argv) {
   // ---- clear asserted while the core is busy (mid-timestep computation)
   {
     clear();
-    uint64_t s[16]; encode(vecs[2].lv, s);
-    for (int b = 0; b < 7; b++) load_byte((uint8_t)(s[0] >> (8 * b)));
-    set_ui((uint8_t)(s[0] >> 56)); set_uio(uio | STB); tick(4); set_uio(uio & ~STB);
+    uint8_t s[16][NB]; encode(vecs[2].lv, s);
+    for (int b = 0; b < NB - 1; b++) load_byte(s[0][b]);
+    set_ui(s[0][NB - 1]); set_uio(uio | STB); tick(4); set_uio(uio & ~STB);
     tick(50);  // now inside the last BYTE pass
     CHECK(busy(), "core should be busy computing the timestep");
     clear();

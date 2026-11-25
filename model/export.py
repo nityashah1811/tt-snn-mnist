@@ -97,6 +97,7 @@ def main():
         "#include <stdint.h>",
         "",
         f"#define SNN_IN     {n_in}   // input pixels ({args.size}x{args.size}), bit p = row*{args.size}+col",
+        f"#define SNN_IW     {(n_in + 63) // 64}   // 64-bit words per input spike vector",
         f"#define SNN_H      {args.hidden}   // hidden LIF neurons (0 = single layer)",
         f"#define SNN_OUT    {n_out}",
         f"#define SNN_T      {args.T}   // timesteps per inference",
@@ -109,12 +110,19 @@ def main():
     lines.append("")
     for i, w in enumerate(weights):
         pos, neg = masks(w)
-        ctype, width = ("uint64_t", 16) if w.shape[1] > 32 else ("uint32_t", 8)
-        suf = "ULL" if ctype == "uint64_t" else "U"
         for name, m in (("POS", pos), ("NEG", neg)):
-            body = ",\n    ".join(f"0x{x:0{width}X}{suf}" for x in m)
-            lines.append(f"// Layer {i + 1} {name}: bit j set => weight[n][j] = {'+1' if name == 'POS' else '-1'}")
-            lines.append(f"static const {ctype} W{i + 1}_{name}[{w.shape[0]}] = {{\n    {body}\n}};")
+            sign = "+1" if name == "POS" else "-1"
+            if i == 0:  # input layer: SNN_IW 64-bit words per neuron, word k holds inputs 64k..64k+63
+                nw = (w.shape[1] + 63) // 64
+                rows = ["{" + ", ".join(f"0x{(x >> (64 * k)) & (2 ** 64 - 1):016X}ULL" for k in range(nw)) + "}"
+                        for x in m]
+                body = ",\n    ".join(rows)
+                lines.append(f"// Layer 1 {name}: bit (j % 64) of word (j / 64) set => weight[n][j] = {sign}")
+                lines.append(f"static const uint64_t W1_{name}[{w.shape[0]}][SNN_IW] = {{\n    {body}\n}};")
+            else:
+                body = ",\n    ".join(f"0x{x:08X}U" for x in m)
+                lines.append(f"// Layer {i + 1} {name}: bit j set => weight[n][j] = {sign}")
+                lines.append(f"static const uint32_t W{i + 1}_{name}[{w.shape[0]}] = {{\n    {body}\n}};")
     (out / "snn_weights.h").write_text("\n".join(lines) + "\n")
 
     with open(out / "test_vectors.txt", "w") as f:

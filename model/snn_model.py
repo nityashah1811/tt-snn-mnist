@@ -28,8 +28,10 @@ def rate_encode(levels: torch.Tensor, T: int, max_level: int = 3) -> torch.Tenso
 def preprocess(images: torch.Tensor, size: int) -> torch.Tensor:
     """images (N,28,28) uint8 -> (N, size*size) levels in 0..3."""
     x = images.float().unsqueeze(1) / 255.0
-    if size == 8:
-        x = x[:, :, 2:26, 2:26]  # 24x24 centre crop -> 3x3 blocks
+    if size in (8, 12):
+        x = x[:, :, 2:26, 2:26]  # 24x24 centre crop -> 3x3 (8x8) or 2x2 (12x12) blocks
+    elif size == 10:
+        x = x[:, :, 4:24, 4:24]  # 20x20 centre crop (MNIST digit box) -> 2x2 blocks
     x = F.adaptive_avg_pool2d(x, size)
     return torch.clamp(torch.floor(x * 4), 0, 3).long().flatten(1)  # 2-bit levels
 
